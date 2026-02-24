@@ -1,4 +1,3 @@
-HTML
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
@@ -70,10 +69,8 @@ HTML
 
 <div class="card">
     <h2>3️⃣ 紀錄餐點算熱量</h2>
-    
     <label>📷 拍照上傳 (選填：可選多張，沒照片也可不傳)</label>
     <input type="file" id="imageInput" accept="image/*" multiple>
-    
     <div id="previewContainer"></div>
     
     <div style="display: flex; gap: 10px; margin-top: 15px;">
@@ -201,15 +198,7 @@ HTML
         }
     });
 
-    async function fileToGenerativePart(file) {
-        const base64EncodedDataPromise = new Promise((resolve) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result.split(',')[1]);
-            reader.readAsDataURL(file);
-        });
-        return { inlineData: { data: await base64EncodedDataPromise, mimeType: file.type } };
-    }
-
+    // 小圖示魔法 (給歷史紀錄用的)
     function compressImage(file, maxSize = 120) {
         return new Promise((resolve) => {
             const reader = new FileReader();
@@ -236,6 +225,36 @@ HTML
         });
     }
 
+    // --- 新增：大照片上傳加速魔法 (傳給 AI 之前先瘦身) ---
+    function compressForAI(file, maxSize = 800) {
+        return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    let width = img.width;
+                    let height = img.height;
+                    if (width > height) {
+                        if (width > maxSize) { height *= maxSize / width; width = maxSize; }
+                    } else {
+                        if (height > maxSize) { width *= maxSize / height; height = maxSize; }
+                    }
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    
+                    // 轉成 AI 看得懂的格式
+                    const base64String = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
+                    resolve({ inlineData: { data: base64String, mimeType: 'image/jpeg' } });
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
     window.analyzeFood = async function() {
         const apiKey = document.getElementById('apiKey').value;
         const fileInput = document.getElementById('imageInput');
@@ -247,8 +266,6 @@ HTML
         const hasPhotos = files.length > 0;
 
         if (!apiKey) { alert("記得先輸入 API Key 喔！"); return; }
-        
-        // --- 這裡就是防呆邏輯：沒照片也沒文字，才會阻擋 ---
         if (!hasPhotos && hintInput === "") { 
             alert("請至少上傳一張照片，或者在備註欄打字告訴小G吃了什麼喔！(兩者擇一即可)"); 
             return; 
@@ -268,7 +285,6 @@ HTML
             let thumbnailsArray = [];
 
             if (hasPhotos) {
-                // 情境 1 & 2：有照片 (不管有沒有打字都適用)
                 let hintInstruction = hintInput !== "" ? `【重要提示】：使用者表示這些餐點包含「${hintInput}」。請務必參考這個提示。` : "";
                 const prompt = `你是一位專業的營養專家。請綜合評估「這幾張圖片」中的「所有食物」，並估算總熱量。
                 ${hintInstruction}
@@ -283,11 +299,11 @@ HTML
                 promptParts.push(prompt);
                 for (let i = 0; i < files.length; i++) {
                     const file = files[i];
-                    promptParts.push(await fileToGenerativePart(file));
+                    // 使用新的加速魔法，不再傳送超大原圖！
+                    promptParts.push(await compressForAI(file));
                     thumbnailsArray.push(await compressImage(file)); 
                 }
             } else {
-                // 情境 3：沒照片，純打字
                 const prompt = `你是一位專業的營養專家。請根據使用者的文字描述：「${hintInput}」，估算這些食物的總熱量。
                 回傳格式必須是標準的 JSON：
                 {
@@ -302,7 +318,6 @@ HTML
 
             const result = await model.generateContent(promptParts);
             const responseText = await result.response.text();
-            
             const foodData = JSON.parse(responseText);
 
             if(foodData.calories > 0) {
@@ -324,8 +339,16 @@ HTML
             }
 
         } catch (error) {
-            console.error(error);
-            alert("哎呀，分析時發生錯誤了，請檢查網路或 API Key 是否正確。");
+            console.error("詳細錯誤:", error);
+            const errStr = error.toString();
+            
+            // --- 聰明錯誤提示機制 ---
+            if (errStr.includes("429") || errStr.includes("Quota") || errStr.includes("Too Many Requests")) {
+                alert("💦 小G 需要喘口氣！\n\n免費版 API 有「每分鐘只能問 15 次」的限制。\n妳剛剛可能連續按太快被系統暫時擋住了，請等 1 分鐘後再試一次喔！");
+            } else {
+                alert("哎呀，分析時發生錯誤了！\n\n可能是網路連線不穩，或是 API Key 輸入不正確，請檢查後再試一次。");
+            }
+            
         } finally {
             loadingDiv.style.display = 'none';
         }
