@@ -37,6 +37,9 @@
         .delete-btn { width: auto; padding: 5px 10px; background: #dc3545; font-size: 13px; margin-top: auto; align-self: flex-end;}
         .delete-btn:hover { background: #c82333; }
         .date-picker-container { text-align: center; margin-bottom: 15px; background: #eef2f5; padding: 10px; border-radius: 8px;}
+        
+        /* BMI 顯示區塊樣式 */
+        #bmiResultBox { margin-top: 15px; padding: 15px; background: #eef2f5; border-radius: 8px; text-align: center; display: none; border: 1px dashed #ccc; }
     </style>
 </head>
 <body>
@@ -56,6 +59,12 @@
         <div style="flex: 1;"><label>體重 (kg)</label><input type="number" id="weight" placeholder="例如: 55"></div>
     </div>
     <button onclick="calculateTDEE()">儲存設定並計算目標</button>
+    
+    <div id="bmiResultBox">
+        <span style="font-size: 16px; color: #555;">妳目前的 BMI 值：<strong id="bmiValue" style="font-size: 24px; color: #007bff;">0</strong></span>
+        <br>
+        <span id="bmiStatus" style="font-size: 15px; font-weight: bold; margin-top: 8px; display: inline-block;"></span>
+    </div>
 </div>
 
 <div class="card">
@@ -124,6 +133,35 @@
         updateDashboard();
     };
 
+    // --- 新增：計算與顯示 BMI 的專屬小魔法 ---
+    function showBMI(h, w) {
+        const heightM = h / 100; // 公分換算成公尺
+        const bmi = (w / (heightM * heightM)).toFixed(1); // 取到小數點第一位
+        
+        let bmiStatus = "";
+        let statusColor = "";
+        
+        // 依照台灣國民健康署的標準
+        if (bmi < 18.5) { 
+            bmiStatus = "體重過輕 🪶 (建議多補充營養喔！)"; 
+            statusColor = "#6c757d"; 
+        } else if (bmi < 24) { 
+            bmiStatus = "健康體位 ✨ (非常標準，繼續保持！)"; 
+            statusColor = "#28a745"; 
+        } else if (bmi < 27) { 
+            bmiStatus = "稍微過重 🤏 (要注意飲食均衡囉！)"; 
+            statusColor = "#d84315"; 
+        } else { 
+            bmiStatus = "肥胖警戒 🚨 (建議稍微控制熱量攝取喔！)"; 
+            statusColor = "#dc3545"; 
+        }
+
+        document.getElementById('bmiResultBox').style.display = 'block';
+        document.getElementById('bmiValue').innerText = bmi;
+        document.getElementById('bmiStatus').innerText = bmiStatus;
+        document.getElementById('bmiStatus').style.color = statusColor;
+    }
+
     window.calculateTDEE = function() {
         const gender = document.getElementById('gender').value;
         const age = parseInt(document.getElementById('age').value);
@@ -137,6 +175,10 @@
         
         localStorage.setItem('calorieGoal', dailyGoal);
         localStorage.setItem('userProfile', JSON.stringify({gender, age, height, weight}));
+        
+        // 呼叫顯示 BMI 的功能
+        showBMI(height, weight);
+        
         alert(`設定完成！建議熱量約為 ${dailyGoal} 大卡。`);
         updateDashboard();
     };
@@ -150,6 +192,11 @@
             document.getElementById('age').value = profile.age;
             document.getElementById('height').value = profile.height;
             document.getElementById('weight').value = profile.weight;
+            
+            // 如果瀏覽器有記住身高體重，一打開網頁就自動顯示 BMI
+            if(profile.height && profile.weight) {
+                showBMI(profile.height, profile.weight);
+            }
         }
     }
 
@@ -198,7 +245,6 @@
         }
     });
 
-    // 小圖示魔法 (給歷史紀錄用的)
     function compressImage(file, maxSize = 120) {
         return new Promise((resolve) => {
             const reader = new FileReader();
@@ -225,7 +271,6 @@
         });
     }
 
-    // --- 新增：大照片上傳加速魔法 (傳給 AI 之前先瘦身) ---
     function compressForAI(file, maxSize = 800) {
         return new Promise((resolve) => {
             const reader = new FileReader();
@@ -244,8 +289,6 @@
                     canvas.height = height;
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0, width, height);
-                    
-                    // 轉成 AI 看得懂的格式
                     const base64String = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
                     resolve({ inlineData: { data: base64String, mimeType: 'image/jpeg' } });
                 };
@@ -299,7 +342,6 @@
                 promptParts.push(prompt);
                 for (let i = 0; i < files.length; i++) {
                     const file = files[i];
-                    // 使用新的加速魔法，不再傳送超大原圖！
                     promptParts.push(await compressForAI(file));
                     thumbnailsArray.push(await compressImage(file)); 
                 }
@@ -341,14 +383,11 @@
         } catch (error) {
             console.error("詳細錯誤:", error);
             const errStr = error.toString();
-            
-            // --- 聰明錯誤提示機制 ---
             if (errStr.includes("429") || errStr.includes("Quota") || errStr.includes("Too Many Requests")) {
                 alert("💦 小G 需要喘口氣！\n\n免費版 API 有「每分鐘只能問 15 次」的限制。\n妳剛剛可能連續按太快被系統暫時擋住了，請等 1 分鐘後再試一次喔！");
             } else {
                 alert("哎呀，分析時發生錯誤了！\n\n可能是網路連線不穩，或是 API Key 輸入不正確，請檢查後再試一次。");
             }
-            
         } finally {
             loadingDiv.style.display = 'none';
         }
