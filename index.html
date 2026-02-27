@@ -20,7 +20,6 @@
         .stat.remaining span { color: #28a745; }
         .stat.consumed span { color: #dc3545; }
 
-        /* 新增：三大營養素比例條樣式 */
         .macro-container { margin-top: 15px; background: #fff; border: 1px solid #e0e0e0; padding: 15px; border-radius: 8px; text-align: center; }
         .macro-title { font-weight: bold; margin-bottom: 10px; font-size: 14px; color: #555; }
         .macro-bar { display: flex; height: 20px; border-radius: 10px; overflow: hidden; margin-bottom: 10px; background: #eee;}
@@ -28,6 +27,12 @@
         .bar-protein { background: #28a745; transition: width 0.5s; }
         .bar-fat { background: #dc3545; transition: width 0.5s; }
         .macro-labels { display: flex; justify-content: space-between; font-size: 13px; font-weight: bold;}
+        
+        /* 新增：剩餘營養素記帳本樣式 */
+        .macro-remaining-box { display: flex; justify-content: space-between; margin-top: 15px; padding-top: 15px; border-top: 1px dashed #ccc; text-align: center;}
+        .macro-stat { flex: 1; font-size: 13px; color: #666;}
+        .macro-stat span { display: block; font-size: 18px; font-weight: bold; margin-top: 3px; margin-bottom: 3px;}
+        .macro-stat small { font-size: 11px; color: #999;}
         
         #previewContainer { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
         .preview-img { width: 80px; height: 80px; object-fit: cover; border-radius: 8px; border: 1px solid #ccc; }
@@ -40,7 +45,6 @@
         .history-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 5px;}
         .history-desc { font-size: 13px; color: #555; white-space: pre-line; margin-bottom: 5px; line-height: 1.4;}
         
-        /* 歷史紀錄中的營養素小標籤 */
         .history-macros { font-size: 12px; color: #666; background: #fff; padding: 4px 8px; border-radius: 4px; display: inline-block; margin-bottom: 10px; border: 1px solid #eee;}
         
         .meal-tag { background: #ffe082; padding: 3px 8px; border-radius: 12px; font-size: 12px; font-weight: bold; margin-bottom: 5px; color: #d84315; display: inline-block;}
@@ -83,7 +87,7 @@
     </div>
     
     <div class="macro-container">
-        <div class="macro-title">📊 今日三大營養素熱量佔比</div>
+        <div class="macro-title">📊 今日三大營養素佔比</div>
         <div class="macro-bar">
             <div id="barCarbs" class="bar-carbs" style="width: 0%;"></div>
             <div id="barProtein" class="bar-protein" style="width: 0%;"></div>
@@ -93,6 +97,12 @@
             <span style="color: #b08d00;">🍚 碳水 <span id="txtCarbs">0%</span></span>
             <span style="color: #28a745;">🥩 蛋白質 <span id="txtProtein">0%</span></span>
             <span style="color: #dc3545;">🥑 脂肪 <span id="txtFat">0%</span></span>
+        </div>
+        
+        <div class="macro-remaining-box">
+            <div class="macro-stat">🍚 剩餘碳水<br><span id="remCarbs" style="color:#b08d00;">0g</span><small>總目標 <span id="goalCarbsDisplay">0</span>g</small></div>
+            <div class="macro-stat">🥩 剩餘蛋白質<br><span id="remProtein" style="color:#28a745;">0g</span><small>總目標 <span id="goalProteinDisplay">0</span>g</small></div>
+            <div class="macro-stat">🥑 剩餘脂肪<br><span id="remFat" style="color:#dc3545;">0g</span><small>總目標 <span id="goalFatDisplay">0</span>g</small></div>
         </div>
     </div>
 </div>
@@ -137,6 +147,11 @@
     import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
 
     let dailyGoal = 0;
+    // 新增三個變數來記住目標公克數
+    let goalCarbs = 0;
+    let goalProtein = 0;
+    let goalFat = 0;
+    
     let consumed = 0;
     let foodHistory = [];
     let currentDateKey = ""; 
@@ -182,7 +197,14 @@
         bmr = (gender === 'female') ? bmr - 161 : bmr + 5;
         dailyGoal = Math.round(bmr * 1.375);
         
+        // 依照健康標準比例，算出每天該吃的公克數
+        // 碳水(50%): 1g=4大卡 / 蛋白質(20%): 1g=4大卡 / 脂肪(30%): 1g=9大卡
+        goalCarbs = Math.round((dailyGoal * 0.50) / 4);
+        goalProtein = Math.round((dailyGoal * 0.20) / 4);
+        goalFat = Math.round((dailyGoal * 0.30) / 9);
+        
         localStorage.setItem('calorieGoal', dailyGoal);
+        localStorage.setItem('macroGoals', JSON.stringify({carbs: goalCarbs, protein: goalProtein, fat: goalFat}));
         localStorage.setItem('userProfile', JSON.stringify({gender, age, height, weight}));
         
         showBMI(height, weight);
@@ -193,6 +215,14 @@
     function loadSettings() {
         const savedGoal = localStorage.getItem('calorieGoal');
         if(savedGoal) dailyGoal = parseInt(savedGoal);
+        
+        const savedMacros = JSON.parse(localStorage.getItem('macroGoals'));
+        if(savedMacros) {
+            goalCarbs = savedMacros.carbs;
+            goalProtein = savedMacros.protein;
+            goalFat = savedMacros.fat;
+        }
+
         const profile = JSON.parse(localStorage.getItem('userProfile'));
         if(profile) {
             document.getElementById('gender').value = profile.gender;
@@ -220,8 +250,8 @@
         updateDashboard();
     }
 
-    // --- 核心更新：更新儀表板時，連同營養素一起計算 ---
     function updateDashboard() {
+        // 更新熱量
         document.getElementById('dailyGoalDisplay').innerText = dailyGoal;
         document.getElementById('consumedDisplay').innerText = consumed;
         const remaining = dailyGoal - consumed;
@@ -229,16 +259,15 @@
         remainElem.innerText = remaining;
         remainElem.style.color = remaining < 0 ? '#dc3545' : '#28a745';
 
-        // 計算三大營養素比例
+        // 統計今天吃了多少克
         let sumCarbs = 0, sumProtein = 0, sumFat = 0;
         foodHistory.forEach(item => {
-            // 如果舊紀錄沒有營養素資料，就當作 0，避免程式壞掉
             sumCarbs += (item.carbs_g || 0);
             sumProtein += (item.protein_g || 0);
             sumFat += (item.fat_g || 0);
         });
 
-        // 將公克數換算成熱量 (碳水4大卡、蛋白質4大卡、脂肪9大卡)
+        // 1. 更新上方的比例條
         const calCarbs = sumCarbs * 4;
         const calProtein = sumProtein * 4;
         const calFat = sumFat * 9;
@@ -251,14 +280,33 @@
             pctFat = Math.round((calFat / totalMacroCal) * 100);
         }
 
-        // 更新畫面上的長條圖與文字
         document.getElementById('barCarbs').style.width = pctCarbs + '%';
         document.getElementById('barProtein').style.width = pctProtein + '%';
         document.getElementById('barFat').style.width = pctFat + '%';
-        
         document.getElementById('txtCarbs').innerText = pctCarbs + '%';
         document.getElementById('txtProtein').innerText = pctProtein + '%';
         document.getElementById('txtFat').innerText = pctFat + '%';
+
+        // 2. 更新下方的「剩餘額度記帳本」
+        document.getElementById('goalCarbsDisplay').innerText = goalCarbs;
+        document.getElementById('goalProteinDisplay').innerText = goalProtein;
+        document.getElementById('goalFatDisplay').innerText = goalFat;
+
+        const remCarbs = goalCarbs - sumCarbs;
+        const remProtein = goalProtein - sumProtein;
+        const remFat = goalFat - sumFat;
+
+        const elCarbs = document.getElementById('remCarbs');
+        elCarbs.innerText = remCarbs + 'g';
+        elCarbs.style.color = remCarbs < 0 ? '#dc3545' : '#b08d00';
+
+        const elProtein = document.getElementById('remProtein');
+        elProtein.innerText = remProtein + 'g';
+        elProtein.style.color = remProtein < 0 ? '#dc3545' : '#28a745';
+
+        const elFat = document.getElementById('remFat');
+        elFat.innerText = remFat + 'g';
+        elFat.style.color = remFat < 0 ? '#dc3545' : '#d84315';
 
         renderHistoryList();
     }
@@ -360,7 +408,6 @@
             let promptParts = [];
             let thumbnailsArray = [];
 
-            // --- 核心更新：要求 AI 在 JSON 中吐出三大營養素的克數 ---
             const jsonFormat = `{
                 "food_name": "菜色總稱",
                 "calories": 總熱量(整數),
@@ -457,7 +504,6 @@
                 imagesHtml = `<div class="history-photo" style="background:#f8f9fa; display:flex; align-items:center; justify-content:center; font-size:12px; color:#888; border: 1px dashed #ccc;">✏️ 筆記</div>`;
             }
 
-            // 新增：在歷史紀錄裡顯示這餐的營養公克數
             let macrosHtml = '';
             if(item.carbs_g !== undefined) {
                 macrosHtml = `<div class="history-macros">🍚 碳水 ${item.carbs_g}g | 🥩 蛋白質 ${item.protein_g}g | 🥑 脂肪 ${item.fat_g}g</div>`;
