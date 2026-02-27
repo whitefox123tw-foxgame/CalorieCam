@@ -400,7 +400,6 @@
             let promptParts = [];
             let thumbnailsArray = [];
 
-            // --- 這裡我把要求「詳細列出個別估算熱量」加回來了！ ---
             const jsonFormat = `{
                 "food_name": "菜色總稱",
                 "calories": 總熱量(整數),
@@ -447,6 +446,10 @@
                 document.getElementById('previewContainer').innerHTML = ''; 
                 
                 updateDashboard();
+                
+                // --- 新增：分析完成的貼心小提醒彈跳視窗 ---
+                alert(`🎉 分析完成！\n\n這份【${foodData.food_name}】大約是 ${foodData.calories} 大卡。\n\n已幫妳自動扣除額度，個別食物的熱量與營養素明細，請往下滑查看飲食圖鑑喔！`);
+                
             } else {
                 alert("小G 無法估算熱量，請嘗試提供更詳細的描述或照片喔！");
             }
