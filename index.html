@@ -20,25 +20,33 @@
         .stat.remaining span { color: #28a745; }
         .stat.consumed span { color: #dc3545; }
 
+        /* 新增：三大營養素比例條樣式 */
+        .macro-container { margin-top: 15px; background: #fff; border: 1px solid #e0e0e0; padding: 15px; border-radius: 8px; text-align: center; }
+        .macro-title { font-weight: bold; margin-bottom: 10px; font-size: 14px; color: #555; }
+        .macro-bar { display: flex; height: 20px; border-radius: 10px; overflow: hidden; margin-bottom: 10px; background: #eee;}
+        .bar-carbs { background: #ffc107; transition: width 0.5s; }
+        .bar-protein { background: #28a745; transition: width 0.5s; }
+        .bar-fat { background: #dc3545; transition: width 0.5s; }
+        .macro-labels { display: flex; justify-content: space-between; font-size: 13px; font-weight: bold;}
+        
         #previewContainer { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
         .preview-img { width: 80px; height: 80px; object-fit: cover; border-radius: 8px; border: 1px solid #ccc; }
-        
         .loading { text-align: center; display: none; color: #ff8c00; font-weight: bold; margin-top: 10px;}
         
         .history-item { background: #fff8e1; padding: 15px; border-left: 4px solid #ffc107; margin-top: 10px; border-radius: 4px; display: flex; gap: 15px; position: relative; align-items: flex-start;}
         .history-photos-container { display: flex; flex-direction: column; gap: 5px; flex-shrink: 0; width: 70px;}
         .history-photo { width: 70px; height: 70px; object-fit: cover; border-radius: 8px; border: 1px solid #ddd; }
-        
         .history-content { flex: 1; display: flex; flex-direction: column; }
         .history-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 5px;}
-        .history-desc { font-size: 13px; color: #555; white-space: pre-line; margin-bottom: 10px; line-height: 1.4;}
+        .history-desc { font-size: 13px; color: #555; white-space: pre-line; margin-bottom: 5px; line-height: 1.4;}
+        
+        /* 歷史紀錄中的營養素小標籤 */
+        .history-macros { font-size: 12px; color: #666; background: #fff; padding: 4px 8px; border-radius: 4px; display: inline-block; margin-bottom: 10px; border: 1px solid #eee;}
         
         .meal-tag { background: #ffe082; padding: 3px 8px; border-radius: 12px; font-size: 12px; font-weight: bold; margin-bottom: 5px; color: #d84315; display: inline-block;}
         .delete-btn { width: auto; padding: 5px 10px; background: #dc3545; font-size: 13px; margin-top: auto; align-self: flex-end;}
         .delete-btn:hover { background: #c82333; }
         .date-picker-container { text-align: center; margin-bottom: 15px; background: #eef2f5; padding: 10px; border-radius: 8px;}
-        
-        /* BMI 顯示區塊樣式 */
         #bmiResultBox { margin-top: 15px; padding: 15px; background: #eef2f5; border-radius: 8px; text-align: center; display: none; border: 1px dashed #ccc; }
     </style>
 </head>
@@ -61,18 +69,31 @@
     <button onclick="calculateTDEE()">儲存設定並計算目標</button>
     
     <div id="bmiResultBox">
-        <span style="font-size: 16px; color: #555;">妳目前的 BMI 值：<strong id="bmiValue" style="font-size: 24px; color: #007bff;">0</strong></span>
-        <br>
+        <span style="font-size: 16px; color: #555;">妳目前的 BMI 值：<strong id="bmiValue" style="font-size: 24px; color: #007bff;">0</strong></span><br>
         <span id="bmiStatus" style="font-size: 15px; font-weight: bold; margin-top: 8px; display: inline-block;"></span>
     </div>
 </div>
 
 <div class="card">
-    <h2>2️⃣ 日常熱量追蹤</h2>
+    <h2>2️⃣ 日常熱量與營養追蹤</h2>
     <div class="dashboard">
         <div class="stat">每日目標<br><span id="dailyGoalDisplay">0</span></div>
         <div class="stat consumed">已攝取<br><span id="consumedDisplay">0</span></div>
         <div class="stat remaining">還可吃<br><span id="remainingDisplay">0</span></div>
+    </div>
+    
+    <div class="macro-container">
+        <div class="macro-title">📊 今日三大營養素熱量佔比</div>
+        <div class="macro-bar">
+            <div id="barCarbs" class="bar-carbs" style="width: 0%;"></div>
+            <div id="barProtein" class="bar-protein" style="width: 0%;"></div>
+            <div id="barFat" class="bar-fat" style="width: 0%;"></div>
+        </div>
+        <div class="macro-labels">
+            <span style="color: #b08d00;">🍚 碳水 <span id="txtCarbs">0%</span></span>
+            <span style="color: #28a745;">🥩 蛋白質 <span id="txtProtein">0%</span></span>
+            <span style="color: #dc3545;">🥑 脂肪 <span id="txtFat">0%</span></span>
+        </div>
     </div>
 </div>
 
@@ -99,7 +120,7 @@
     </div>
     
     <button id="analyzeBtn" onclick="analyzeFood()">上傳分析</button>
-    <div id="loading" class="loading">小G 正在認真幫妳分析熱量中... 🍳</div>
+    <div id="loading" class="loading">小G 正在認真幫妳分析熱量與營養中... 🍳</div>
 </div>
 
 <div class="card">
@@ -133,28 +154,16 @@
         updateDashboard();
     };
 
-    // --- 新增：計算與顯示 BMI 的專屬小魔法 ---
     function showBMI(h, w) {
-        const heightM = h / 100; // 公分換算成公尺
-        const bmi = (w / (heightM * heightM)).toFixed(1); // 取到小數點第一位
-        
+        const heightM = h / 100;
+        const bmi = (w / (heightM * heightM)).toFixed(1);
         let bmiStatus = "";
         let statusColor = "";
         
-        // 依照台灣國民健康署的標準
-        if (bmi < 18.5) { 
-            bmiStatus = "體重過輕 🪶 (建議多補充營養喔！)"; 
-            statusColor = "#6c757d"; 
-        } else if (bmi < 24) { 
-            bmiStatus = "健康體位 ✨ (非常標準，繼續保持！)"; 
-            statusColor = "#28a745"; 
-        } else if (bmi < 27) { 
-            bmiStatus = "稍微過重 🤏 (要注意飲食均衡囉！)"; 
-            statusColor = "#d84315"; 
-        } else { 
-            bmiStatus = "肥胖警戒 🚨 (建議稍微控制熱量攝取喔！)"; 
-            statusColor = "#dc3545"; 
-        }
+        if (bmi < 18.5) { bmiStatus = "體重過輕 🪶 (建議多補充營養喔！)"; statusColor = "#6c757d"; } 
+        else if (bmi < 24) { bmiStatus = "健康體位 ✨ (非常標準，繼續保持！)"; statusColor = "#28a745"; } 
+        else if (bmi < 27) { bmiStatus = "稍微過重 🤏 (要注意飲食均衡囉！)"; statusColor = "#d84315"; } 
+        else { bmiStatus = "肥胖警戒 🚨 (建議稍微控制熱量攝取喔！)"; statusColor = "#dc3545"; }
 
         document.getElementById('bmiResultBox').style.display = 'block';
         document.getElementById('bmiValue').innerText = bmi;
@@ -176,9 +185,7 @@
         localStorage.setItem('calorieGoal', dailyGoal);
         localStorage.setItem('userProfile', JSON.stringify({gender, age, height, weight}));
         
-        // 呼叫顯示 BMI 的功能
         showBMI(height, weight);
-        
         alert(`設定完成！建議熱量約為 ${dailyGoal} 大卡。`);
         updateDashboard();
     };
@@ -192,11 +199,7 @@
             document.getElementById('age').value = profile.age;
             document.getElementById('height').value = profile.height;
             document.getElementById('weight').value = profile.weight;
-            
-            // 如果瀏覽器有記住身高體重，一打開網頁就自動顯示 BMI
-            if(profile.height && profile.weight) {
-                showBMI(profile.height, profile.weight);
-            }
+            if(profile.height && profile.weight) showBMI(profile.height, profile.weight);
         }
     }
 
@@ -217,6 +220,7 @@
         updateDashboard();
     }
 
+    // --- 核心更新：更新儀表板時，連同營養素一起計算 ---
     function updateDashboard() {
         document.getElementById('dailyGoalDisplay').innerText = dailyGoal;
         document.getElementById('consumedDisplay').innerText = consumed;
@@ -224,6 +228,38 @@
         const remainElem = document.getElementById('remainingDisplay');
         remainElem.innerText = remaining;
         remainElem.style.color = remaining < 0 ? '#dc3545' : '#28a745';
+
+        // 計算三大營養素比例
+        let sumCarbs = 0, sumProtein = 0, sumFat = 0;
+        foodHistory.forEach(item => {
+            // 如果舊紀錄沒有營養素資料，就當作 0，避免程式壞掉
+            sumCarbs += (item.carbs_g || 0);
+            sumProtein += (item.protein_g || 0);
+            sumFat += (item.fat_g || 0);
+        });
+
+        // 將公克數換算成熱量 (碳水4大卡、蛋白質4大卡、脂肪9大卡)
+        const calCarbs = sumCarbs * 4;
+        const calProtein = sumProtein * 4;
+        const calFat = sumFat * 9;
+        const totalMacroCal = calCarbs + calProtein + calFat;
+
+        let pctCarbs = 0, pctProtein = 0, pctFat = 0;
+        if (totalMacroCal > 0) {
+            pctCarbs = Math.round((calCarbs / totalMacroCal) * 100);
+            pctProtein = Math.round((calProtein / totalMacroCal) * 100);
+            pctFat = Math.round((calFat / totalMacroCal) * 100);
+        }
+
+        // 更新畫面上的長條圖與文字
+        document.getElementById('barCarbs').style.width = pctCarbs + '%';
+        document.getElementById('barProtein').style.width = pctProtein + '%';
+        document.getElementById('barFat').style.width = pctFat + '%';
+        
+        document.getElementById('txtCarbs').innerText = pctCarbs + '%';
+        document.getElementById('txtProtein').innerText = pctProtein + '%';
+        document.getElementById('txtFat').innerText = pctFat + '%';
+
         renderHistoryList();
     }
 
@@ -309,10 +345,7 @@
         const hasPhotos = files.length > 0;
 
         if (!apiKey) { alert("記得先輸入 API Key 喔！"); return; }
-        if (!hasPhotos && hintInput === "") { 
-            alert("請至少上傳一張照片，或者在備註欄打字告訴小G吃了什麼喔！(兩者擇一即可)"); 
-            return; 
-        }
+        if (!hasPhotos && hintInput === "") { alert("請至少上傳一張照片，或者在備註欄打字喔！"); return; }
         if (dailyGoal === 0) { alert("請先在上面完成「我的專屬數值」設定並儲存！"); return; }
 
         loadingDiv.style.display = 'block';
@@ -327,17 +360,21 @@
             let promptParts = [];
             let thumbnailsArray = [];
 
+            // --- 核心更新：要求 AI 在 JSON 中吐出三大營養素的克數 ---
+            const jsonFormat = `{
+                "food_name": "菜色總稱",
+                "calories": 總熱量(整數),
+                "carbs_g": 碳水化合物總克數(整數),
+                "protein_g": 蛋白質總克數(整數),
+                "fat_g": 脂肪總克數(整數),
+                "description": "營養組成簡單說明"
+            }`;
+
             if (hasPhotos) {
-                let hintInstruction = hintInput !== "" ? `【重要提示】：使用者表示這些餐點包含「${hintInput}」。請務必參考這個提示。` : "";
-                const prompt = `你是一位專業的營養專家。請綜合評估「這幾張圖片」中的「所有食物」，並估算總熱量。
-                ${hintInstruction}
-                回傳格式必須是標準的 JSON：
-                {
-                    "food_name": "菜色總稱",
-                    "calories": 總熱量數字 (必須是純粹的「整數數字」),
-                    "description": "請詳細列出【圖片中每一樣食物的個別估算熱量】，並簡單說明營養狀態。"
-                }
-                注意：請給出合理的估算整數，calories 絕對不可以填寫 0。`;
+                let hintInstruction = hintInput !== "" ? `【提示】：包含「${hintInput}」。` : "";
+                const prompt = `你是一位專業營養專家。請評估圖片中所有食物的總熱量與三大營養素公克數。${hintInstruction}
+                回傳格式必須是嚴格的 JSON：${jsonFormat}
+                請給出合理的估算整數，不要填 0。`;
                 
                 promptParts.push(prompt);
                 for (let i = 0; i < files.length; i++) {
@@ -346,15 +383,9 @@
                     thumbnailsArray.push(await compressImage(file)); 
                 }
             } else {
-                const prompt = `你是一位專業的營養專家。請根據使用者的文字描述：「${hintInput}」，估算這些食物的總熱量。
-                回傳格式必須是標準的 JSON：
-                {
-                    "food_name": "菜色總稱",
-                    "calories": 總熱量數字 (必須是純粹的「整數數字」),
-                    "description": "請詳細列出【每一樣食物的個別估算熱量】，並簡單說明營養狀態。"
-                }
-                注意：請給出合理的估算整數，calories 絕對不可以填寫 0。`;
-                
+                const prompt = `你是一位專業營養專家。請根據描述：「${hintInput}」，估算總熱量與三大營養素公克數。
+                回傳格式必須是嚴格的 JSON：${jsonFormat}
+                請給出合理的估算整數，不要填 0。`;
                 promptParts.push(prompt);
             }
 
@@ -383,10 +414,10 @@
         } catch (error) {
             console.error("詳細錯誤:", error);
             const errStr = error.toString();
-            if (errStr.includes("429") || errStr.includes("Quota") || errStr.includes("Too Many Requests")) {
-                alert("💦 小G 需要喘口氣！\n\n免費版 API 有「每分鐘只能問 15 次」的限制。\n妳剛剛可能連續按太快被系統暫時擋住了，請等 1 分鐘後再試一次喔！");
+            if (errStr.includes("429") || errStr.includes("Quota")) {
+                alert("💦 小G 需要喘口氣！請等 1 分鐘後再試一次喔！");
             } else {
-                alert("哎呀，分析時發生錯誤了！\n\n可能是網路連線不穩，或是 API Key 輸入不正確，請檢查後再試一次。");
+                alert("哎呀，分析時發生錯誤了！請檢查網路或 API Key。");
             }
         } finally {
             loadingDiv.style.display = 'none';
@@ -397,7 +428,6 @@
         if(confirm("確定要刪除這筆餐點紀錄嗎？")) {
             consumed -= foodHistory[index].calories;
             foodHistory.splice(index, 1);
-            
             if (foodHistory.length === 0) {
                 localStorage.removeItem('foodHistory_' + currentDateKey);
                 consumed = 0;
@@ -427,11 +457,15 @@
                 imagesHtml = `<div class="history-photo" style="background:#f8f9fa; display:flex; align-items:center; justify-content:center; font-size:12px; color:#888; border: 1px dashed #ccc;">✏️ 筆記</div>`;
             }
 
+            // 新增：在歷史紀錄裡顯示這餐的營養公克數
+            let macrosHtml = '';
+            if(item.carbs_g !== undefined) {
+                macrosHtml = `<div class="history-macros">🍚 碳水 ${item.carbs_g}g | 🥩 蛋白質 ${item.protein_g}g | 🥑 脂肪 ${item.fat_g}g</div>`;
+            }
+
             listDiv.innerHTML += `
                 <div class="history-item">
-                    <div class="history-photos-container">
-                        ${imagesHtml}
-                    </div>
+                    <div class="history-photos-container">${imagesHtml}</div>
                     <div class="history-content">
                         <div class="history-header">
                             <div>
@@ -440,6 +474,7 @@
                             </div>
                             <span style="color: #dc3545; font-weight: bold; font-size: 18px;">+${item.calories} 卡</span>
                         </div>
+                        ${macrosHtml}
                         <div class="history-desc">${item.description}</div>
                         <button class="delete-btn" onclick="deleteSingleItem(${index})">刪除</button>
                     </div>
