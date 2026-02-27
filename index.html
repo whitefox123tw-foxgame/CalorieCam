@@ -28,7 +28,6 @@
         .bar-fat { background: #dc3545; transition: width 0.5s; }
         .macro-labels { display: flex; justify-content: space-between; font-size: 13px; font-weight: bold;}
         
-        /* 新增：剩餘營養素記帳本樣式 */
         .macro-remaining-box { display: flex; justify-content: space-between; margin-top: 15px; padding-top: 15px; border-top: 1px dashed #ccc; text-align: center;}
         .macro-stat { flex: 1; font-size: 13px; color: #666;}
         .macro-stat span { display: block; font-size: 18px; font-weight: bold; margin-top: 3px; margin-bottom: 3px;}
@@ -147,7 +146,6 @@
     import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
 
     let dailyGoal = 0;
-    // 新增三個變數來記住目標公克數
     let goalCarbs = 0;
     let goalProtein = 0;
     let goalFat = 0;
@@ -197,8 +195,6 @@
         bmr = (gender === 'female') ? bmr - 161 : bmr + 5;
         dailyGoal = Math.round(bmr * 1.375);
         
-        // 依照健康標準比例，算出每天該吃的公克數
-        // 碳水(50%): 1g=4大卡 / 蛋白質(20%): 1g=4大卡 / 脂肪(30%): 1g=9大卡
         goalCarbs = Math.round((dailyGoal * 0.50) / 4);
         goalProtein = Math.round((dailyGoal * 0.20) / 4);
         goalFat = Math.round((dailyGoal * 0.30) / 9);
@@ -251,7 +247,6 @@
     }
 
     function updateDashboard() {
-        // 更新熱量
         document.getElementById('dailyGoalDisplay').innerText = dailyGoal;
         document.getElementById('consumedDisplay').innerText = consumed;
         const remaining = dailyGoal - consumed;
@@ -259,7 +254,6 @@
         remainElem.innerText = remaining;
         remainElem.style.color = remaining < 0 ? '#dc3545' : '#28a745';
 
-        // 統計今天吃了多少克
         let sumCarbs = 0, sumProtein = 0, sumFat = 0;
         foodHistory.forEach(item => {
             sumCarbs += (item.carbs_g || 0);
@@ -267,7 +261,6 @@
             sumFat += (item.fat_g || 0);
         });
 
-        // 1. 更新上方的比例條
         const calCarbs = sumCarbs * 4;
         const calProtein = sumProtein * 4;
         const calFat = sumFat * 9;
@@ -287,7 +280,6 @@
         document.getElementById('txtProtein').innerText = pctProtein + '%';
         document.getElementById('txtFat').innerText = pctFat + '%';
 
-        // 2. 更新下方的「剩餘額度記帳本」
         document.getElementById('goalCarbsDisplay').innerText = goalCarbs;
         document.getElementById('goalProteinDisplay').innerText = goalProtein;
         document.getElementById('goalFatDisplay').innerText = goalFat;
@@ -408,13 +400,14 @@
             let promptParts = [];
             let thumbnailsArray = [];
 
+            // --- 這裡我把要求「詳細列出個別估算熱量」加回來了！ ---
             const jsonFormat = `{
                 "food_name": "菜色總稱",
                 "calories": 總熱量(整數),
                 "carbs_g": 碳水化合物總克數(整數),
                 "protein_g": 蛋白質總克數(整數),
                 "fat_g": 脂肪總克數(整數),
-                "description": "營養組成簡單說明"
+                "description": "請詳細列出【每一樣食物的個別估算熱量】，並簡單說明營養組成"
             }`;
 
             if (hasPhotos) {
