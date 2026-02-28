@@ -9,8 +9,8 @@
         h1, h2 { text-align: center; color: #2c3e50; }
         .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); margin-bottom: 20px; }
         
-        label { display: block; margin-top: 10px; font-weight: bold; }
-        input[type="number"], input[type="text"], input[type="password"], select { width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
+        label { display: block; margin-top: 10px; font-weight: bold; color: #444; }
+        input[type="number"], input[type="text"], input[type="password"], select { width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 15px; }
         button { display: block; width: 100%; padding: 12px; background: #007bff; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; margin-top: 15px; font-weight: bold; }
         button:hover { background: #0056b3; }
         
@@ -33,6 +33,9 @@
         .macro-stat span { display: block; font-size: 18px; font-weight: bold; margin-top: 3px; margin-bottom: 3px;}
         .macro-stat small { font-size: 11px; color: #999;}
         
+        #overCalorieWarning { display: none; margin-top: 15px; padding: 15px; background: #fff3cd; border: 1px solid #ffeeba; border-radius: 8px; color: #856404; text-align: center; font-weight: bold; line-height: 1.5; }
+        .exercise-highlight { color: #dc3545; font-size: 18px; }
+
         #previewContainer { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
         .preview-img { width: 80px; height: 80px; object-fit: cover; border-radius: 8px; border: 1px solid #ccc; }
         .loading { text-align: center; display: none; color: #ff8c00; font-weight: bold; margin-top: 10px;}
@@ -60,7 +63,7 @@
 </div>
 
 <div class="card">
-    <h2>1️⃣ 我的專屬數值</h2>
+    <h2>1️⃣ 我的專屬數值與目標</h2>
     <div style="display: flex; gap: 10px;">
         <div style="flex: 1;"><label>性別</label><select id="gender"><option value="female" selected>女性</option><option value="male">男性</option></select></div>
         <div style="flex: 1;"><label>年齡</label><input type="number" id="age" value="45"></div>
@@ -69,6 +72,16 @@
         <div style="flex: 1;"><label>身高 (cm)</label><input type="number" id="height" placeholder="例如: 160"></div>
         <div style="flex: 1;"><label>體重 (kg)</label><input type="number" id="weight" placeholder="例如: 55"></div>
     </div>
+    
+    <div style="margin-top: 10px;">
+        <label>我的目標 🎯</label>
+        <select id="goalType" style="background-color: #fdf5e6;">
+            <option value="maintain" selected>維持現狀 (正常飲食)</option>
+            <option value="mild_loss">溫和減重 (每日減少 300 大卡)</option>
+            <option value="aggressive_loss">積極減重 (每日減少 500 大卡)</option>
+        </select>
+    </div>
+
     <button onclick="calculateTDEE()">儲存設定並計算目標</button>
     
     <div id="bmiResultBox">
@@ -83,6 +96,11 @@
         <div class="stat">每日目標<br><span id="dailyGoalDisplay">0</span></div>
         <div class="stat consumed">已攝取<br><span id="consumedDisplay">0</span></div>
         <div class="stat remaining">還可吃<br><span id="remainingDisplay">0</span></div>
+    </div>
+    
+    <div id="overCalorieWarning">
+        ⚠️ 哎呀！今天不小心超標了 <span id="overCalSpan" class="exercise-highlight">0</span> 大卡！<br>
+        如果要消耗掉這些多餘的熱量，大約需要去慢跑 <span id="overJogSpan" class="exercise-highlight">0</span> 分鐘喔！🏃‍♀️
     </div>
     
     <div class="macro-container">
@@ -189,22 +207,44 @@
         const age = parseInt(document.getElementById('age').value);
         const height = parseInt(document.getElementById('height').value);
         const weight = parseInt(document.getElementById('weight').value);
+        const goalType = document.getElementById('goalType').value;
+        
         if(!height || !weight) { alert("請填寫身高和體重喔！"); return; }
 
         let bmr = (10 * weight) + (6.25 * height) - (5 * age);
         bmr = (gender === 'female') ? bmr - 161 : bmr + 5;
-        dailyGoal = Math.round(bmr * 1.375);
         
+        // 基礎維持熱量 (輕度活動)
+        let tdee = bmr * 1.375;
+        
+        // 根據目標扣除熱量赤字
+        if (goalType === 'mild_loss') {
+            tdee -= 300;
+        } else if (goalType === 'aggressive_loss') {
+            tdee -= 500;
+        }
+        
+        // 保護機制：熱量最低不建議低於 1200 大卡
+        dailyGoal = Math.max(Math.round(tdee), 1200);
+        
+        // 用新的目標熱量來計算三大營養素
         goalCarbs = Math.round((dailyGoal * 0.50) / 4);
         goalProtein = Math.round((dailyGoal * 0.20) / 4);
         goalFat = Math.round((dailyGoal * 0.30) / 9);
         
         localStorage.setItem('calorieGoal', dailyGoal);
         localStorage.setItem('macroGoals', JSON.stringify({carbs: goalCarbs, protein: goalProtein, fat: goalFat}));
-        localStorage.setItem('userProfile', JSON.stringify({gender, age, height, weight}));
+        localStorage.setItem('userProfile', JSON.stringify({gender, age, height, weight, goalType}));
         
         showBMI(height, weight);
-        alert(`設定完成！建議熱量約為 ${dailyGoal} 大卡。`);
+        
+        // 依照不同目標給予不同提示
+        let alertMsg = `設定完成！\n依照您的目標，每日建議攝取熱量調整為 ${dailyGoal} 大卡。`;
+        if (goalType !== 'maintain') {
+            alertMsg += `\n(已自動為您扣除減重所需的熱量赤字喔！💪)`;
+        }
+        alert(alertMsg);
+        
         updateDashboard();
     };
 
@@ -225,6 +265,9 @@
             document.getElementById('age').value = profile.age;
             document.getElementById('height').value = profile.height;
             document.getElementById('weight').value = profile.weight;
+            if(profile.goalType) {
+                document.getElementById('goalType').value = profile.goalType;
+            }
             if(profile.height && profile.weight) showBMI(profile.height, profile.weight);
         }
     }
@@ -253,6 +296,20 @@
         const remainElem = document.getElementById('remainingDisplay');
         remainElem.innerText = remaining;
         remainElem.style.color = remaining < 0 ? '#dc3545' : '#28a745';
+
+        const overWarningDiv = document.getElementById('overCalorieWarning');
+        if (remaining < 0 && dailyGoal > 0) {
+            const overCal = Math.abs(remaining);
+            const userWeight = parseInt(document.getElementById('weight').value) || 55;
+            // 簡單公式：慢跑(7 METs) 每公斤每分鐘約消耗 0.1225 大卡
+            const jogMins = Math.round(overCal / (0.1225 * userWeight));
+            
+            document.getElementById('overCalSpan').innerText = overCal;
+            document.getElementById('overJogSpan').innerText = jogMins;
+            overWarningDiv.style.display = 'block';
+        } else {
+            overWarningDiv.style.display = 'none';
+        }
 
         let sumCarbs = 0, sumProtein = 0, sumFat = 0;
         foodHistory.forEach(item => {
@@ -447,8 +504,10 @@
                 
                 updateDashboard();
                 
-                // --- 新增：分析完成的貼心小提醒彈跳視窗 ---
-                alert(`🎉 分析完成！\n\n這份【${foodData.food_name}】大約是 ${foodData.calories} 大卡。\n\n已幫妳自動扣除額度，個別食物的熱量與營養素明細，請往下滑查看飲食圖鑑喔！`);
+                const userWeight = parseInt(document.getElementById('weight').value) || 55;
+                const walkMins = Math.round(foodData.calories / (0.07525 * userWeight)); 
+                
+                alert(`🎉 分析完成！\n\n這份【${foodData.food_name}】大約是 ${foodData.calories} 大卡。\n\n💡 趣味換算：如果要消耗「這單獨一餐」的熱量，大約等於要走 ${walkMins} 分鐘的路喔！\n\n(已幫妳自動扣除今日額度，詳細熱量與營養素明細請往下滑查看)`);
                 
             } else {
                 alert("小G 無法估算熱量，請嘗試提供更詳細的描述或照片喔！");
